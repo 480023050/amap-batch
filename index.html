@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>批量起止点距离耗时计算器</title>
+    <title>批量路线距离耗时计算器</title>
     <style>
         body{font-family:"Microsoft Yahei",sans-serif;padding:24px;max-width:1200px;margin:0 auto;box-sizing:border-box;}
         textarea{width:100%;height:220px;padding:10px;margin:12px 0;font-size:14px;line-height:1.6;}
@@ -25,10 +25,7 @@
     <div id="result"></div>
 
 <script>
-// ============【部署完成后修改这里！】============
-// 格式：https://你的vercel域名.vercel.app/api/route
 const API_URL = "https://amap-batch.edgeone.app/api/route";
-// ===============================================
 
 let resultList = [];
 const resultDom = document.getElementById('result');
@@ -60,13 +57,15 @@ async function calcSingle(startAddr, endAddr){
         const resp = await fetch(API_URL,{
             method:"POST",
             headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({start:startAddr,end:endAddr})
+            body:JSON.stringify({startAddr:startAddr,endAddr:endAddr})
         })
         const json = await resp.json();
         if(json.code === 0 && json.data){
             const {distance,duration} = json.data;
-            appendLog(`${startAddr} → ${endAddr} | 里程：${distance}km，预估时长：${duration}分钟`);
-            resultList.push({start:startAddr,end:endAddr,distance,duration});
+            const km = (Number(distance)/1000).toFixed(2);
+            const minute = Math.round(Number(duration)/60);
+            appendLog(`${startAddr} → ${endAddr} | 里程：${km}km，预估时长：${minute}分钟`);
+            resultList.push({start:startAddr,end:endAddr,distance:km,duration:minute});
         }else{
             appendLog(`${startAddr} → ${endAddr}：${json.msg}`);
             resultList.push({start:startAddr,end:endAddr,distance:"-",duration:"-"});
