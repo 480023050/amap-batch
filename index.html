@@ -16,7 +16,7 @@
     <p class="tip">操作说明：Excel/WPS选中两列地址 → Ctrl+C复制 → 直接粘贴到下方输入框，一行=一条（Tab制表符分隔）</p>
     <textarea id="inputData" placeholder="示例格式：
 浙江省杭州市西湖区文三路100号文锦大厦b座	福建省福州市台江区福晟·钱隆广场
-四川省成都市武侯区天府大道中段1388号花样年	黑龙江省哈尔滨市南岗区学府路74号黑龙江大学c区"></textarea>
+四川省成都市武侯区天府大道中段1388号花样年华	黑龙江省哈尔滨市南岗区学府路74号黑龙江大学c区"></textarea>
     <br>
     <input type="file" id="fileInput" accept=".csv">
     <button onclick="startBatchCalc()">▶ 开始批量计算</button>
@@ -27,7 +27,7 @@
 <script>
 // ============【部署完成后修改这里！】============
 // 格式：https://你的vercel域名.vercel.app/api/route
-const API_URL = const API_URL = "https://amap-batch.edgeone.app/api/route";";
+const API_URL = "https://amap-batch.edgeone.app/api/route";
 // ===============================================
 
 let resultList = [];
