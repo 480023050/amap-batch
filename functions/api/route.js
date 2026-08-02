@@ -6,15 +6,22 @@ function httpGet(url) {
     https.get(url, (res) => {
       let buf = '';
       res.on('data', d => buf += d);
-      res.on('end', () => resolve(JSON.parse(buf)));
-    }).on('error', reject);
+      res.on('end', () => {
+        try {
+          const data = JSON.parse(buf);
+          resolve(data);
+        } catch (e) {
+          resolve(null);
+        }
+      });
+    }).on('error', (err) => reject(err));
   });
 }
 
 async function getGeo(address) {
   const url = `https://restapi.amap.com/v3/geocode/geo?address=${encodeURIComponent(address)}&key=${AMAP_KEY}`;
   const res = await httpGet(url);
-  if (res.status === '1' && res.geocodes && res.geocodes.length > 0) {
+  if (res && res.status === '1' && res.geocodes && res.geocodes.length > 0) {
     return res.geocodes[0].location;
   }
   return null;
@@ -23,20 +30,18 @@ async function getGeo(address) {
 async function getRoute(oLoc, dLoc) {
   const url = `https://restapi.amap.com/v3/direction/driving?origin=${oLoc}&destination=${dLoc}&key=${AMAP_KEY}`;
   const res = await httpGet(url);
-  if (res.status === '1' && res.route && res.route.paths && res.route.paths.length > 0) {
+  if (res && res.status === '1' && res.route && res.route.paths && res.route.paths.length > 0) {
     return res.route.paths[0];
   }
   return null;
 }
 
-// EdgeOne 函数入口 + CORS跨域核心
 export async function onRequest({ request }) {
   const headers = new Headers();
   headers.set("Access-Control-Allow-Origin", "*");
   headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   headers.set("Access-Control-Allow-Headers", "Content-Type");
 
-  // 处理浏览器OPTIONS预检请求
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers });
   }
