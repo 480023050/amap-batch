@@ -1,48 +1,122 @@
-export default async function handler(request) {
-  const AMAP_KEY = process.env.AMAP_KEY;
-  const headers = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Content-Type": "application/json"
-  };
-
-  // 处理跨域预检 OPTIONS
-  if (request.method === "OPTIONS") {
-    return new Response(JSON.stringify({code:0}), { status:200, headers });
-  }
-
-  if (!AMAP_KEY) {
-    return new Response(JSON.stringify({code:-1,msg:"未配置AMAP_KEY"}), { headers });
-  }
-
-  if (request.method !== "POST") {
-    return new Response(JSON.stringify({code:-1,msg:"仅支持POST请求"}), { headers });
-  }
-
-  try {
-    const body = await request.json();
-    const {startAddr, endAddr} = body;
-    if (!startAddr || !endAddr) {
-      return new Response(JSON.stringify({code:-1,msg:"缺少startAddr或endAddr"}), { headers });
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>路程距离查询</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
-
-    // 高德驾车路线规划
-    const url = `https://restapi.amap.com/v3/direction/driving?origin=${encodeURIComponent(startAddr)}&destination=${encodeURIComponent(endAddr)}&key=${AMAP_KEY}`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (data.status !== "1") {
-      return new Response(JSON.stringify({code:-1,msg:"地址解析失败："+data.info}), { headers });
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 0 20px;
     }
+    .item {
+      margin: 16px 0;
+    }
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+    }
+    #result {
+      margin-top: 20px;
+      padding: 14px;
+      border-radius: 6px;
+      background: #f1f5f9;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h2>驾车距离查询</h2>
 
-    const route = data.route.paths[0];
-    const result = {
-      distance: route.distance,
-      duration: route.duration
+  <div class="item">
+    <label>起点地址</label>
+    <input id="start" placeholder="例如：成都市龙泉驿区龙泉街道">
+  </div>
+
+  <div class="item">
+    <label>终点地址</label>
+    <input id="end" placeholder="例如：成都市锦江区春熙路">
+  </div>
+
+  <button id="btn">开始查询</button>
+
+  <div id="result"></div>
+
+  <script>
+    const startInput = document.getElementById('start');
+    const endInput = document.getElementById('end');
+    const btn = document.getElementById('btn');
+    const resultBox = document.getElementById('result');
+
+    btn.onclick = async function () {
+      const start = startInput.value.trim();
+      const end = endInput.value.trim();
+      if (!start || !end) {
+        resultBox.innerText = '请填写起点和终点';
+        return;
+      }
+
+      btn.disabled = true;
+      resultBox.innerText = '正在查询……';
+
+      try {
+        const res = await fetch("/api", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            startAddr: start,
+            endAddr: end
+          })
+        });
+
+        const data = await res.json();
+        if (data.code === 0) {
+          const km = (data.data.distance / 1000).toFixed(2);
+          const minute = Math.ceil(data.data.duration / 60);
+          resultBox.innerText = `✅ 查询成功
+路程：${km} 公里
+预计时长：${minute} 分钟`;
+        } else {
+          resultBox.innerText = `❌ ${data.msg}`;
+        }
+      } catch (err) {
+        resultBox.innerText = '网络请求失败，请稍后重试';
+        console.error(err);
+      } finally {
+        btn.disabled = false;
+      }
     };
-    return new Response(JSON.stringify({code:0,data:result}), { headers });
-  } catch (err) {
-    return new Response(JSON.stringify({code:-1,msg:"服务器异常"}), { headers });
-  }
-}
+  </script>
+</body>
+</html>
