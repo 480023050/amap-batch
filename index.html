@@ -1,113 +1,48 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <title>批量路线距离耗时计算器</title>
-    <style>
-        body{font-family:"Microsoft Yahei",sans-serif;padding:24px;max-width:1200px;margin:0 auto;box-sizing:border-box;}
-        textarea{width:100%;height:220px;padding:10px;margin:12px 0;font-size:14px;line-height:1.6;}
-        button{padding:9px 18px;margin:6px;cursor:pointer;font-size:14px;}
-        #result{margin-top:16px;white-space:pre-wrap;background:#f6f8fa;padding:14px;min-height:240px;border:1px solid #ddd;font-size:14px;}
-        .tip{color:#666;font-size:14px;line-height:1.7}
-    </style>
-</head>
-<body>
-    <h3>批量路线距离耗时计算工具【Excel表格直接复制粘贴】</h3>
-    <p class="tip">操作说明：Excel/WPS选中两列地址 → Ctrl+C复制 → 直接粘贴到下方输入框，一行=一条（Tab制表符分隔）</p>
-    <textarea id="inputData" placeholder="示例格式：
-浙江省杭州市西湖区文三路100号文锦大厦b座	福建省福州市台江区福晟·钱隆广场
-四川省成都市武侯区天府大道中段1388号花样年华	黑龙江省哈尔滨市南岗区学府路74号黑龙江大学c区"></textarea>
-    <br>
-    <input type="file" id="fileInput" accept=".csv">
-    <button onclick="startBatchCalc()">▶ 开始批量计算</button>
-    <button onclick="exportCSV()">📥 导出结果CSV</button>
-    <div style="margin-top:10px;">运行日志 & 计算结果：</div>
-    <div id="result"></div>
+export default async function handler(request) {
+  const AMAP_KEY = process.env.AMAP_KEY;
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Content-Type": "application/json"
+  };
 
-<script>
-const API_URL = "https://amap-batch.edgeone.app/api/route";
+  // 处理跨域预检 OPTIONS
+  if (request.method === "OPTIONS") {
+    return new Response(JSON.stringify({code:0}), { status:200, headers });
+  }
 
-let resultList = [];
-const resultDom = document.getElementById('result');
+  if (!AMAP_KEY) {
+    return new Response(JSON.stringify({code:-1,msg:"未配置AMAP_KEY"}), { headers });
+  }
 
-async function startBatchCalc(){
-    resultList = [];
-    resultDom.innerText = "开始执行批量任务...\n";
-    const text = document.getElementById("inputData").value.trim();
-    const lines = text.split("\n");
+  if (request.method !== "POST") {
+    return new Response(JSON.stringify({code:-1,msg:"仅支持POST请求"}), { headers });
+  }
 
-    for(let line of lines){
-        const lineTrim = line.trim();
-        if(!lineTrim) continue;
-        const addrArr = lineTrim.split('\t').map(item=>item.trim());
-        const start = addrArr[0];
-        const end = addrArr[1];
-        if(!start || !end){
-            appendLog(`【跳过该行，识别失败】${lineTrim}`);
-            continue;
-        }
-        await calcSingle(start, end);
-        await sleep(800);
+  try {
+    const body = await request.json();
+    const {startAddr, endAddr} = body;
+    if (!startAddr || !endAddr) {
+      return new Response(JSON.stringify({code:-1,msg:"缺少startAddr或endAddr"}), { headers });
     }
-    appendLog("\n===== 全部任务执行完成 =====");
-}
 
-async function calcSingle(startAddr, endAddr){
-    try{
-        const resp = await fetch(API_URL,{
-            method:"POST",
-            headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({startAddr:startAddr,endAddr:endAddr})
-        })
-        const json = await resp.json();
-        if(json.code === 0 && json.data){
-            const {distance,duration} = json.data;
-            const km = (Number(distance)/1000).toFixed(2);
-            const minute = Math.round(Number(duration)/60);
-            appendLog(`${startAddr} → ${endAddr} | 里程：${km}km，预估时长：${minute}分钟`);
-            resultList.push({start:startAddr,end:endAddr,distance:km,duration:minute});
-        }else{
-            appendLog(`${startAddr} → ${endAddr}：${json.msg}`);
-            resultList.push({start:startAddr,end:endAddr,distance:"-",duration:"-"});
-        }
-    }catch(e){
-        appendLog(`${startAddr} → ${endAddr}：网络请求失败`);
-        resultList.push({start:startAddr,end:endAddr,distance:"-",duration:"-"});
+    // 高德驾车路线规划
+    const url = `https://restapi.amap.com/v3/direction/driving?origin=${encodeURIComponent(startAddr)}&destination=${encodeURIComponent(endAddr)}&key=${AMAP_KEY}`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.status !== "1") {
+      return new Response(JSON.stringify({code:-1,msg:"地址解析失败："+data.info}), { headers });
     }
-}
 
-function sleep(ms){
-    return new Promise(r=>setTimeout(r,ms))
+    const route = data.route.paths[0];
+    const result = {
+      distance: route.distance,
+      duration: route.duration
+    };
+    return new Response(JSON.stringify({code:0,data:result}), { headers });
+  } catch (err) {
+    return new Response(JSON.stringify({code:-1,msg:"服务器异常"}), { headers });
+  }
 }
-function appendLog(txt){
-    resultDom.innerText += txt + "\n";
-    resultDom.scrollTop = resultDom.scrollHeight;
-}
-
-function exportCSV(){
-    if(resultList.length===0){
-        alert("暂无计算结果！");
-        return;
-    }
-    let csv = "起点,终点,里程(km),预估时长(分钟)\n";
-    resultList.forEach(row=>{
-        csv += `"${row.start}","${row.end}","${row.distance}","${row.duration}"\n`
-    })
-    const blob = new Blob([csv],{type:"text/csv;charset=utf-8"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = "路线批量计算结果.csv";
-    a.click();
-}
-
-document.getElementById("fileInput").addEventListener("change",function(e){
-    const reader = new FileReader();
-    reader.onload = ev=>{
-        document.getElementById("inputData").value = ev.target.result;
-    }
-    reader.readAsText(e.target.files[0]);
-})
-</script>
-</body>
-</html>
