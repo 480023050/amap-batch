@@ -24,37 +24,49 @@ async function getRoute(oLoc, dLoc) {
   const url = `https://restapi.amap.com/v3/direction/driving?origin=${oLoc}&destination=${dLoc}&key=${AMAP_KEY}`;
   const res = await httpGet(url);
   if (res.status === '1' && res.route && res.route.paths && res.route.paths.length > 0) {
-    const path = res.route.paths[0];
-    return {
-      distance: (path.distance / 1000).toFixed(2),
-      duration: Math.round(path.duration / 60)
-    };
+    return res.route.paths[0];
   }
   return null;
 }
 
-module.exports = async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Content-Type', 'application/json');
-  if (req.method !== 'POST') {
-    return res.end(JSON.stringify({ code: -1, msg: '仅支持POST请求' }));
+// EdgeOne 函数入口 + CORS跨域核心
+export async function onRequest({ request }) {
+  const headers = new Headers();
+  headers.set("Access-Control-Allow-Origin", "*");
+  headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  headers.set("Access-Control-Allow-Headers", "Content-Type");
+
+  // 处理浏览器OPTIONS预检请求
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers });
   }
-  const { start, end } = req.body;
-  if (!start || !end) {
-    return res.end(JSON.stringify({ code: -1, msg: '起点终点不能为空' }));
-  }
+
   try {
-    const origin = await getGeo(start);
-    const dest = await getGeo(end);
-    if (!origin || !dest) {
-      return res.end(JSON.stringify({ code: 0, data: null, msg: '地址解析失败' }));
+    const body = await request.json();
+    const { startAddr, endAddr } = body;
+    if (!startAddr || !endAddr) {
+      return new Response(JSON.stringify({ code: -1, msg: "缺少起点或终点地址" }), { headers });
     }
-    const routeInfo = await getRoute(origin, dest);
-    if (!routeInfo) {
-      return res.end(JSON.stringify({ code: 0, data: null, msg: '未找到路线' }));
+
+    const oLoc = await getGeo(startAddr);
+    const dLoc = await getGeo(endAddr);
+    if (!oLoc || !dLoc) {
+      return new Response(JSON.stringify({ code: -2, msg: "地址解析失败" }), { headers });
     }
-    return res.end(JSON.stringify({ code: 0, data: routeInfo }));
+
+    const pathInfo = await getRoute(oLoc, dLoc);
+    if (!pathInfo) {
+      return new Response(JSON.stringify({ code: -3, msg: "路线查询失败" }), { headers });
+    }
+
+    const result = {
+      start: startAddr,
+      end: endAddr,
+      distance: pathInfo.distance,
+      duration: pathInfo.duration
+    };
+    return new Response(JSON.stringify({ code: 0, data: result }), { headers });
   } catch (err) {
-    return res.end(JSON.stringify({ code: -1, msg: '接口异常' }));
+    return new Response(JSON.stringify({ code: -99, msg: "服务异常", error: err.message }), { headers });
   }
-};
+}
